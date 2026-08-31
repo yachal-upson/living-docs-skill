@@ -5,9 +5,11 @@
 
 use serde_json::Value;
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
 const PLUGIN_ROOT_PREFIX: &str = "\"${CLAUDE_PLUGIN_ROOT}\"/";
 
 /// Resolves the repository root from the `cli` crate's manifest directory.
@@ -31,6 +33,7 @@ fn read_json(relative_path: &str) -> Value {
 /// Flattens every nested `hooks[].command` string out of a parsed
 /// `hooks.json` document, across all event groups (`PreToolUse`,
 /// `SessionStart`, ...).
+#[cfg(unix)]
 fn collect_hook_commands(hooks_json: &Value) -> Vec<String> {
     let mut commands = Vec::new();
     let Some(groups) = hooks_json["hooks"].as_object() else {
@@ -70,6 +73,7 @@ fn manifests_parse_and_plugin_identifies_itself() {
 }
 
 #[test]
+#[cfg(unix)]
 fn hook_commands_are_plugin_rooted_and_point_at_executable_files() {
     let hooks_json = read_json("hooks/hooks.json");
     let commands = collect_hook_commands(&hooks_json);

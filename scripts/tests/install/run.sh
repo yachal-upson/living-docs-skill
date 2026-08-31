@@ -22,7 +22,12 @@ REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 SCRIPT="$REPO_ROOT/install.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/living-docs-install-tests.XXXXXX")"
 
-TARGET_BIN="$REPO_ROOT/target/release/living-docs"
+BIN_NAME="living-docs"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) BIN_NAME="living-docs.exe" ;;
+esac
+
+TARGET_BIN="$REPO_ROOT/target/release/$BIN_NAME"
 TARGET_BIN_BACKUP="$TMP/living-docs.orig"
 [[ -f "$TARGET_BIN" ]] && cp "$TARGET_BIN" "$TARGET_BIN_BACKUP"
 
@@ -115,9 +120,13 @@ done
 
 [[ -n "$manifest" ]] || exit 0
 repo_root="$(dirname "$(dirname "$manifest")")"
+bin_name="living-docs"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) bin_name="living-docs.exe" ;;
+esac
 mkdir -p "$repo_root/target/release"
-printf '#!/bin/sh\nexit 0\n' >"$repo_root/target/release/living-docs"
-chmod +x "$repo_root/target/release/living-docs"
+printf '#!/bin/sh\nexit 0\n' >"$repo_root/target/release/$bin_name"
+chmod +x "$repo_root/target/release/$bin_name"
 STUB
 chmod +x "$STUB_BIN/cargo"
 
@@ -126,6 +135,9 @@ export REAL_UNAME
 
 cat >"$STUB_BIN/uname" <<'STUB'
 #!/usr/bin/env bash
+if [[ "${UNAME_NATIVE:-0}" == "1" ]]; then
+  exec "$REAL_UNAME" "$@"
+fi
 if [[ "${UNAME_UNSUPPORTED:-0}" == "1" ]]; then
   case "$1" in
     -s) echo "SunOS" ;;
@@ -133,7 +145,10 @@ if [[ "${UNAME_UNSUPPORTED:-0}" == "1" ]]; then
   esac
   exit 0
 fi
-exec "$REAL_UNAME" "$@"
+case "$1" in
+  -s) echo "Linux" ;;
+  -m) echo "x86_64" ;;
+esac
 STUB
 chmod +x "$STUB_BIN/uname"
 
@@ -153,7 +168,7 @@ expected_triple() {
   esac
   printf '%s-%s\n' "$arch_part" "$os_part"
 }
-TRIPLE="$(expected_triple)"
+TRIPLE="x86_64-unknown-linux-gnu"
 
 fail=0
 
@@ -168,6 +183,18 @@ invoke() { # invoke <ENV=val>... -- <script args...>
   shift
   reset_state
   OUT="$(env "${envs[@]}" PATH="$STUB_BIN:$PATH" CURL_LOG="$CURL_LOG" \
+    CARGO_LOG="$CARGO_LOG" CURL_LATEST_JSON="$LATEST_JSON" REAL_UNAME="$REAL_UNAME" \
+    bash "$SCRIPT" "$@" 2>&1)"
+  RC=$?
+  CURLLOG=""
+  [[ -f "$CURL_LOG" ]] && CURLLOG="$(cat "$CURL_LOG")"
+}
+
+invoke_in() { # invoke_in <cwd> <script args...>
+  local cwd="$1"
+  shift
+  reset_state
+  OUT="$(cd "$cwd" && env UNAME_NATIVE=1 PATH="$STUB_BIN:$PATH" CURL_LOG="$CURL_LOG" \
     CARGO_LOG="$CARGO_LOG" CURL_LATEST_JSON="$LATEST_JSON" REAL_UNAME="$REAL_UNAME" \
     bash "$SCRIPT" "$@" 2>&1)"
   RC=$?
@@ -222,6 +249,24 @@ assert_file_exists() { # assert_file_exists <name> <path>
   check "$1" "$ok"
 }
 
+assert_file_absent() { # assert_file_absent <name> <path>
+  local ok=0
+  [[ ! -e "$2" ]] && ok=1
+  check "$1" "$ok"
+}
+
+assert_file_has() { # assert_file_has <name> <path> <substring>
+  local ok=0
+  [[ -f "$2" ]] && grep -qF -- "$3" "$2" && ok=1
+  check "$1" "$ok"
+}
+
+assert_file_lacks() { # assert_file_lacks <name> <path> <substring>
+  local ok=1
+  [[ -f "$2" ]] && grep -qF -- "$3" "$2" && ok=0
+  check "$1" "$ok"
+}
+
 echo "install.sh fixtures (ADR 0041)"
 echo
 
@@ -258,6 +303,48 @@ invoke "UNAME_UNSUPPORTED=1" -- cli --dir "$DEST"
 assert_out_has   "4-unsupported-message" \
   "unsupported platform (SunOS/sparc64) for a prebuilt binary; building from source"
 assert_log_lacks "4-no-latest-query" "releases/latest"
+
+echo "case 5: project source install packages runtime under .living-docs and configures gitignore"
+PROJECT="$TMP/project-5"
+mkdir -p "$PROJECT"
+printf '%s\n' '/existing-entry' >"$PROJECT/.gitignore"
+invoke_in "$PROJECT" cli --project --from-source
+assert_exit       "5-exit-0"          0
+assert_file_exists "5-project-binary" "$PROJECT/.living-docs/$BIN_NAME"
+assert_file_has   "5-ignore-begin"    "$PROJECT/.gitignore" \
+  "# >>> living-docs managed runtime >>>"
+assert_file_has   "5-hooks-trackable" "$PROJECT/.gitignore" \
+  "!/.living-docs/hooks/**"
+assert_file_has   "5-preserves-existing" "$PROJECT/.gitignore" "/existing-entry"
+mkdir -p "$PROJECT/.living-docs/hooks"
+: >"$PROJECT/.living-docs/hooks/pre-commit"
+git -C "$PROJECT" init -q
+ignore_ok=0
+if git -C "$PROJECT" check-ignore -q ".living-docs/$BIN_NAME" \
+    && ! git -C "$PROJECT" check-ignore -q ".living-docs/hooks/pre-commit"; then
+  ignore_ok=1
+fi
+check "5-runtime-ignored-hooks-trackable" "$ignore_ok"
+
+echo "case 6: project uninstall removes the binary and only its managed gitignore block"
+invoke_in "$PROJECT" cli --project --uninstall
+assert_exit        "6-exit-0"          0
+assert_file_absent "6-binary-removed"  "$PROJECT/.living-docs/$BIN_NAME"
+assert_file_lacks  "6-ignore-removed"  "$PROJECT/.gitignore" \
+  "# >>> living-docs managed runtime >>>"
+assert_file_has    "6-existing-kept"   "$PROJECT/.gitignore" "/existing-entry"
+
+echo "case 7: project dry-run reports binary and gitignore changes without writing"
+DRY_PROJECT="$TMP/project-7"
+mkdir -p "$DRY_PROJECT"
+printf '%s\n' '/existing-entry' >"$DRY_PROJECT/.gitignore"
+invoke_in "$DRY_PROJECT" cli --project --from-source --dry-run
+assert_exit        "7-exit-0"          0
+assert_out_has     "7-reports-ignore"  "append Living Docs runtime block to .gitignore"
+assert_file_absent "7-no-runtime-dir"  "$DRY_PROJECT/.living-docs"
+assert_file_lacks  "7-ignore-unchanged" "$DRY_PROJECT/.gitignore" \
+  "# >>> living-docs managed runtime >>>"
+assert_file_has    "7-existing-kept"   "$DRY_PROJECT/.gitignore" "/existing-entry"
 
 echo
 if ((fail == 0)); then

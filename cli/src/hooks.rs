@@ -3,9 +3,11 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::fs;
 use std::io;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 const HOOK_ASSET_PATHS: [&str; 2] = [
     "living-docs/hooks/block-docs-handwrite.sh",
@@ -17,6 +19,7 @@ const GIT_HOOKS_DEST_SUBDIR: &str = ".githooks";
 const GIT_HOOKS_PATH_VALUE: &str = ".githooks";
 
 const HOOKS_DEST_SUBDIR: &str = ".living-docs/hooks";
+#[cfg(unix)]
 const SCRIPT_MODE: u32 = 0o755;
 const SETTINGS_REL_PATH: &str = ".claude/settings.json";
 const PRE_TOOL_USE_SECTION: &str = "PreToolUse";
@@ -186,8 +189,18 @@ fn write_script_to(dest_dir: &Path, script: &HookScript) -> io::Result<()> {
     fs::create_dir_all(dest_dir)?;
     let dest = dest_dir.join(script.basename);
     fs::write(&dest, script.bytes.as_ref())?;
-    fs::set_permissions(&dest, fs::Permissions::from_mode(SCRIPT_MODE))?;
+    set_script_permissions(&dest)?;
     println!("wrote {}", dest.display());
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_script_permissions(path: &Path) -> io::Result<()> {
+    fs::set_permissions(path, fs::Permissions::from_mode(SCRIPT_MODE))
+}
+
+#[cfg(not(unix))]
+fn set_script_permissions(_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
@@ -457,6 +470,11 @@ mod tests {
         let script = resolve_one(PRE_COMMIT_ASSET_PATH).expect("pre-commit is embedded");
         assert_eq!(script.basename, "pre-commit");
         assert!(script.bytes.starts_with(b"#!"));
+        let body = String::from_utf8_lossy(script.bytes.as_ref());
+        assert!(body.contains("$ROOT/.living-docs/living-docs"));
+        assert!(body.contains("$ROOT/.living-docs/living-docs.exe"));
+        assert!(body.contains("$ROOT/target/release/living-docs"));
+        assert!(body.contains("$ROOT/target/release/living-docs.exe"));
     }
 
     fn scratch_project(label: &str) -> PathBuf {

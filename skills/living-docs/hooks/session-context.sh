@@ -15,8 +15,14 @@ ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}
 resolve_bin() {
   if command -v living-docs >/dev/null 2>&1; then
     command -v living-docs
+  elif [ -x "$ROOT/.living-docs/living-docs" ]; then
+    printf '%s' "$ROOT/.living-docs/living-docs"
+  elif [ -x "$ROOT/.living-docs/living-docs.exe" ]; then
+    printf '%s' "$ROOT/.living-docs/living-docs.exe"
   elif [ -x "$ROOT/target/release/living-docs" ]; then
     printf '%s' "$ROOT/target/release/living-docs"
+  elif [ -x "$ROOT/target/release/living-docs.exe" ]; then
+    printf '%s' "$ROOT/target/release/living-docs.exe"
   fi
 }
 
@@ -31,7 +37,7 @@ BIN="$(resolve_bin)"
 if [ -n "$BIN" ]; then
   BIN_NOTE="CLI: $BIN"
 else
-  BIN_NOTE="CLI not built — run \`make build\` (or \`cargo build --release --manifest-path cli/Cargo.toml\`) before authoring docs"
+  BIN_NOTE="CLI not found — install it on PATH or at .living-docs/living-docs[.exe], or build target/release/living-docs[.exe]"
 fi
 
 printf 'living-docs: %s. Docs authoring contract: write ONLY the body below the closing --- of a record. Numbering, frontmatter, supersede links, and index rows are CLI-owned — `living-docs new <type> "<title>"`, `living-docs status <NNNN> <Status>`, `living-docs supersede <old> <new>`, `living-docs index`, `living-docs fmt`. Hand-writes to those are blocked by a PreToolUse hook.\n' "$BIN_NOTE"

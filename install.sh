@@ -32,8 +32,8 @@
 #   cli        install the living-docs binary (release asset, cargo build fallback)
 #
 # Options:
-#   --project        install into the current project, not the global user dir
-#   --dir <path>     override the destination skills directory (claude/opencode/codex/pi/cli)
+#   --project        install into the current project; CLI goes to .living-docs/
+#   --dir <path>     override the destination directory (claude/opencode/codex/pi/cli)
 #   --uninstall      remove a previous Living Docs install for the harness
 #   --from-source    (cli only) skip the release asset, build with `cargo build --release`
 #   -n, --dry-run    print what would happen, change nothing
@@ -48,6 +48,8 @@
 #   ./install.sh claude --uninstall   # remove the global Claude install
 #   ./install.sh cli                  # download the living-docs binary to ~/.local/bin
 #   ./install.sh cli --from-source    # build the living-docs binary with cargo instead
+#   ./install.sh cli --project --from-source
+#                                     # build into ./.living-docs/living-docs[.exe]
 
 set -euo pipefail
 
@@ -62,6 +64,8 @@ OVERRIDE_DIR=""
 HARNESS=""
 
 CLI_REPO="ejklock/living-docs-skill"
+GITIGNORE_BEGIN="# >>> living-docs managed runtime >>>"
+GITIGNORE_END="# <<< living-docs managed runtime <<<"
 
 log()  { printf '%s\n' "$*"; }
 run()  { if [[ $DRYRUN -eq 1 ]]; then log "  [dry-run] $*"; else eval "$*"; fi; }
@@ -198,13 +202,60 @@ cli_verify_sha256() {
 }
 
 build_cli_from_source() {
-  local dest="$1"
+  local dest="$1" bin_name="$2"
   command -v cargo >/dev/null 2>&1 \
     || die "cargo not found; install Rust or drop --from-source once a release asset exists"
   run "cargo build --release --manifest-path '$SCRIPT_DIR/cli/Cargo.toml'"
   run "mkdir -p '$dest'"
-  run "install -m 755 '$SCRIPT_DIR/target/release/living-docs' '$dest/living-docs'"
-  note "living-docs (built from source) -> $dest/living-docs"
+  run "install -m 755 '$SCRIPT_DIR/target/release/$bin_name' '$dest/$bin_name'"
+  note "living-docs (built from source) -> $dest/$bin_name"
+}
+
+cli_binary_name() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) printf '%s\n' "living-docs.exe" ;;
+    *)                    printf '%s\n' "living-docs" ;;
+  esac
+}
+
+ensure_project_gitignore() {
+  local file=".gitignore"
+  if [[ -f "$file" ]] && grep -qxF "$GITIGNORE_BEGIN" "$file"; then
+    log "gitignore already configured: $file"
+    return
+  fi
+  if [[ $DRYRUN -eq 1 ]]; then
+    log "  [dry-run] append Living Docs runtime block to $file"
+    return
+  fi
+  if [[ -s "$file" ]]; then printf '\n' >>"$file"; fi
+  {
+    printf '%s\n' "$GITIGNORE_BEGIN"
+    printf '%s\n' '!/.living-docs/'
+    printf '%s\n' '/.living-docs/*'
+    printf '%s\n' '!/.living-docs/hooks/'
+    printf '%s\n' '!/.living-docs/hooks/**'
+    printf '%s\n' "$GITIGNORE_END"
+  } >>"$file"
+  log "configured: $file (runtime ignored; hooks trackable)"
+}
+
+remove_project_gitignore() {
+  local file=".gitignore" tmp
+  [[ -f "$file" ]] || return
+  grep -qxF "$GITIGNORE_BEGIN" "$file" || return
+  if [[ $DRYRUN -eq 1 ]]; then
+    log "  [dry-run] remove Living Docs runtime block from $file"
+    return
+  fi
+  tmp="$(mktemp)"
+  awk -v begin="$GITIGNORE_BEGIN" -v end="$GITIGNORE_END" '
+    $0 == begin { skipping = 1; next }
+    $0 == end   { skipping = 0; next }
+    !skipping   { print }
+  ' "$file" >"$tmp"
+  mv "$tmp" "$file"
+  log "removed Living Docs runtime block from $file"
 }
 
 # --- resolve the release tag to fetch: LIVING_DOCS_VERSION pins one, else the
@@ -227,32 +278,45 @@ cli_resolve_tag() {
 }
 
 install_cli() {
-  local dest="${OVERRIDE_DIR:-$HOME/.local/bin}"
-  local bin_path="$dest/living-docs"
+  local dest bin_name bin_path project_managed=0
+  bin_name="$(cli_binary_name)"
+  if [[ -n "$OVERRIDE_DIR" ]]; then
+    dest="$OVERRIDE_DIR"
+  elif [[ $PROJECT -eq 1 ]]; then
+    dest=".living-docs"
+    project_managed=1
+  else
+    dest="$HOME/.local/bin"
+  fi
+  bin_path="$dest/$bin_name"
 
   if [[ $UNINSTALL -eq 1 ]]; then
     run "rm -f '$bin_path'"
+    [[ $project_managed -eq 1 ]] && remove_project_gitignore
     log "uninstalled: $bin_path"
     return
   fi
 
   if [[ $FROM_SOURCE -eq 1 ]]; then
-    build_cli_from_source "$dest"
-    return
+    build_cli_from_source "$dest" "$bin_name"
+    if [[ $project_managed -eq 1 ]]; then ensure_project_gitignore; fi
+    return 0
   fi
 
   local triple asset tag base asset_url sha_url tmp
   if ! triple="$(cli_target_triple "$(uname -s)" "$(uname -m)")"; then
     log "unsupported platform ($(uname -s)/$(uname -m)) for a prebuilt binary; building from source"
-    build_cli_from_source "$dest"
-    return
+    build_cli_from_source "$dest" "$bin_name"
+    if [[ $project_managed -eq 1 ]]; then ensure_project_gitignore; fi
+    return 0
   fi
 
   asset="living-docs-$triple"
   if ! tag="$(cli_resolve_tag)"; then
     log "could not resolve a release tag (set LIVING_DOCS_VERSION or check network); building from source"
-    build_cli_from_source "$dest"
-    return
+    build_cli_from_source "$dest" "$bin_name"
+    if [[ $project_managed -eq 1 ]]; then ensure_project_gitignore; fi
+    return 0
   fi
   base="https://github.com/$CLI_REPO/releases/download/$tag"
   asset_url="$base/$asset"
@@ -260,7 +324,8 @@ install_cli() {
 
   if [[ $DRYRUN -eq 1 ]]; then
     log "  [dry-run] would download $asset_url ($tag) -> $bin_path (sha256-verified)"
-    return
+    if [[ $project_managed -eq 1 ]]; then ensure_project_gitignore; fi
+    return 0
   fi
 
   tmp="$(mktemp -d)"
@@ -270,13 +335,15 @@ install_cli() {
     run "mkdir -p '$dest'"
     run "install -m 755 '$tmp/$asset' '$bin_path'"
     note "living-docs ($triple) -> $bin_path"
+    [[ $project_managed -eq 1 ]] && ensure_project_gitignore
     rm -rf "$tmp"
     return
   fi
 
   rm -rf "$tmp"
   log "release asset unavailable for $triple; falling back to build from source"
-  build_cli_from_source "$dest"
+  build_cli_from_source "$dest" "$bin_name"
+  if [[ $project_managed -eq 1 ]]; then ensure_project_gitignore; fi
 }
 
 do_harness() {
@@ -301,4 +368,4 @@ else
 fi
 
 log ""
-log "Reminder: this script ships skills only. Enforcement (write-gate, session teaching, pre-commit) installs separately — Claude Code plugin (/plugin marketplace add ejklock/living-docs-skill && /plugin install living-docs@living-docs) or 'living-docs hooks install' for every harness."
+log "Reminder: enforcement installs separately — Claude Code plugin (/plugin marketplace add ejklock/living-docs-skill && /plugin install living-docs@living-docs) or 'living-docs hooks install' for every harness."

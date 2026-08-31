@@ -7,8 +7,13 @@
 .vscode/
 .tmp-smoke/
 
-# Derived SQLite/FTS5 read-model (ADR 0004, issue 0002) — rebuilt via `db sync`
-.living-docs/
+# Project-local Living Docs runtime. Keep installed hook sources trackable.
+# >>> living-docs managed runtime >>>
+!/.living-docs/
+/.living-docs/*
+!/.living-docs/hooks/
+!/.living-docs/hooks/**
+# <<< living-docs managed runtime <<<
 
 # Local publication / marketing drafts and exported assets — not part of the repo
 /publications/

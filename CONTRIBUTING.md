@@ -116,6 +116,8 @@ lychee/yq/jq) needed. Install it once:
 
 ```bash
 ./install.sh cli        # downloads the latest release asset (LIVING_DOCS_VERSION pins a tag; cargo build-from-source fallback)
+# project-local source build from the target project root:
+./install.sh cli --project --from-source  # -> .living-docs/living-docs[.exe]
 # or:
 make cli-install        # thin wrapper over `./install.sh cli` — fetches the latest release, no cargo build
 ```

@@ -1,4 +1,5 @@
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -32,6 +33,22 @@ fn corpus_root() -> PathBuf {
         .parent()
         .unwrap()
         .join("skills/living-docs/hooks")
+}
+
+fn bash_path(path: &Path) -> String {
+    #[cfg(windows)]
+    {
+        // Git Bash expects MSYS-style `/e/...` paths, while the Windows paths
+        // emitted by Rust contain backslashes that Bash treats as escapes.
+        let value = path.to_string_lossy().replace('\\', "/");
+        if value.as_bytes().get(1) == Some(&b':') {
+            return format!("/{}/{}", &value[0..1].to_ascii_lowercase(), &value[3..]);
+        }
+        return value;
+    }
+
+    #[cfg(not(windows))]
+    path.to_string_lossy().into_owned()
 }
 
 fn run_hooks_install(args: &[&str]) -> Output {
@@ -119,6 +136,7 @@ fn living_docs_entries(settings: &serde_json::Value, section: &str) -> Vec<serde
 }
 
 #[test]
+#[cfg(unix)]
 fn install_materializes_both_scripts_byte_identical_at_mode_0755() {
     let project = project_with_bundle("materialize", "docs");
 
@@ -363,6 +381,7 @@ fn install_fails_with_exit_2_when_existing_settings_json_is_not_valid_json_and_n
 }
 
 #[test]
+#[cfg(unix)]
 fn install_materializes_pre_commit_byte_identical_at_mode_0755() {
     let project = project_with_bundle("precommit-materialize", "docs");
     init_git_repo(&project);
@@ -516,6 +535,32 @@ fn binary_dir() -> PathBuf {
         .to_path_buf()
 }
 
+fn install_binary_at(project: &Path, relative_dir: &str) {
+    let bin_name = if cfg!(windows) {
+        "living-docs.exe"
+    } else {
+        "living-docs"
+    };
+    let dest_dir = project.join(relative_dir);
+    fs::create_dir_all(&dest_dir).unwrap();
+    let dest = dest_dir.join(bin_name);
+    fs::copy(env!("CARGO_BIN_EXE_living-docs"), &dest).unwrap();
+    #[cfg(unix)]
+    {
+        let mut permissions = fs::metadata(&dest).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&dest, permissions).unwrap();
+    }
+}
+
+fn install_project_local_binary(project: &Path) {
+    install_binary_at(project, ".living-docs");
+}
+
+fn install_release_build_binary(project: &Path) {
+    install_binary_at(project, "target/release");
+}
+
 fn path_with_binary_dir() -> std::ffi::OsString {
     let mut dirs = vec![binary_dir()];
     if let Some(current) = std::env::var_os("PATH") {
@@ -527,11 +572,12 @@ fn path_with_binary_dir() -> std::ffi::OsString {
 /// The current `$PATH` with every directory carrying a `living-docs`
 /// executable filtered out, so the pre-commit script's `command -v
 /// living-docs` reliably fails regardless of what a developer's host or CI
-/// runner happens to have installed.
+/// runner happens to have installed. Project-relative fallbacks are present
+/// only when an individual test installs one explicitly.
 fn path_without_living_docs() -> std::ffi::OsString {
     let current = std::env::var_os("PATH").unwrap_or_default();
     let filtered: Vec<PathBuf> = std::env::split_paths(&current)
-        .filter(|dir| !dir.join("living-docs").is_file())
+        .filter(|dir| !dir.join("living-docs").is_file() && !dir.join("living-docs.exe").is_file())
         .collect();
     std::env::join_paths(filtered).expect("PATH components join cleanly")
 }
@@ -542,9 +588,10 @@ fn run_pre_commit_script(
     path_override: Option<std::ffi::OsString>,
 ) -> Output {
     let script = corpus_root().join("pre-commit");
+    let script = bash_path(&script);
     let path_value = path_override.unwrap_or_else(path_with_binary_dir);
     Command::new("bash")
-        .arg(&script)
+        .arg(script)
         .current_dir(project)
         .env("LIVING_DOCS_BUNDLE", bundle)
         .env("PATH", path_value)
@@ -659,6 +706,40 @@ fn pre_commit_script_exits_zero_against_a_clean_bundle() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+
+    let _ = fs::remove_dir_all(&project);
+}
+
+#[test]
+fn pre_commit_script_invokes_a_project_local_binary_without_path() {
+    let project = temp_dir("precommit-project-local-bin");
+    init_git_repo(&project);
+    scaffold_canonical_bundle(&project, "bundle");
+    install_project_local_binary(&project);
+
+    let output = run_pre_commit_script(&project, "bundle", Some(path_without_living_docs()));
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("Living Docs lint"), "stdout: {stdout}");
+    assert!(!stderr.contains("no binary found"), "stderr: {stderr}");
+
+    let _ = fs::remove_dir_all(&project);
+}
+
+#[test]
+fn pre_commit_script_invokes_a_release_build_binary_without_path() {
+    let project = temp_dir("precommit-release-build-bin");
+    init_git_repo(&project);
+    scaffold_canonical_bundle(&project, "bundle");
+    install_release_build_binary(&project);
+
+    let output = run_pre_commit_script(&project, "bundle", Some(path_without_living_docs()));
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("Living Docs lint"), "stdout: {stdout}");
+    assert!(!stderr.contains("no binary found"), "stderr: {stderr}");
 
     let _ = fs::remove_dir_all(&project);
 }
