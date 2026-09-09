@@ -132,7 +132,7 @@ for every supported tool.
 Clone the skill repo once, as a sibling of the projects that will use it:
 
 ```bash
-git clone https://github.com/ejklock/living-docs-skill.git
+git clone <this repo URL>
 ```
 
 ### Quick start — co-located project bootstrap
