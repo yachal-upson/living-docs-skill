@@ -63,6 +63,8 @@ pub(crate) fn link_destinations(content: &str) -> Vec<String> {
 /// Resolves a raw destination to a normalized local path, or `None` if it's
 /// external / a pure anchor / unsupported.
 pub(crate) fn resolve_destination(file: &str, raw_dest: &str, bundle: &str) -> Option<String> {
+    let file = normpath(file);
+    let bundle = normpath(bundle);
     let target = strip_anchor(raw_dest);
     if target.is_empty() || is_external(target) {
         return None;
@@ -70,7 +72,7 @@ pub(crate) fn resolve_destination(file: &str, raw_dest: &str, bundle: &str) -> O
     let joined = if let Some(rest) = target.strip_prefix('/') {
         format!("{bundle}/{rest}")
     } else {
-        format!("{}/{}", dirname_str(file), target)
+        format!("{}/{}", dirname_str(&file), target)
     };
     Some(normpath(&joined))
 }
@@ -210,6 +212,18 @@ mod tests {
         assert_eq!(
             resolve_destination("docs/a/index.md", "./c.md", "docs"),
             Some("docs/a/c.md".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_destination_matches_windows_paths_with_logical_paths() {
+        assert_eq!(
+            resolve_destination(
+                r"C:\repo\docs\adr\index.md",
+                "0001-decision.md",
+                r"C:\repo\docs"
+            ),
+            Some("C:/repo/docs/adr/0001-decision.md".to_string())
         );
     }
 }

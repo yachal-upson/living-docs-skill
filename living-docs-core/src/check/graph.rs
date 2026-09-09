@@ -135,6 +135,7 @@ pub(crate) fn dirname_str(path: &str) -> String {
 /// Collapses `.` and `..` segments in a `/`-separated path. Pure string logic —
 /// the path need not exist on disk.
 pub(crate) fn normpath(path: &str) -> String {
+    let path = path.replace('\\', "/");
     let is_abs = path.starts_with('/');
     let mut out: Vec<&str> = Vec::new();
     for seg in path.split('/') {
@@ -164,6 +165,8 @@ fn normpath_pop_or_push(out: &mut Vec<&str>, is_abs: bool) {
 /// Resolves a markdown link target (as written in `file`) to a normalized
 /// path, or `None` if the link is external / a pure anchor / unsupported.
 fn resolve_link(file: &str, raw_target: &str, bundle: &str) -> Option<String> {
+    let file = normpath(file);
+    let bundle = normpath(bundle);
     let target = extract_link_target(raw_target)?;
     if target.contains("://") || target.starts_with("mailto:") || target.starts_with("tel:") {
         return None;
@@ -171,7 +174,7 @@ fn resolve_link(file: &str, raw_target: &str, bundle: &str) -> Option<String> {
     let joined = if target.starts_with('/') {
         format!("{bundle}/{target}")
     } else {
-        format!("{}/{}", dirname_str(file), target)
+        format!("{}/{}", dirname_str(&file), target)
     };
     Some(normpath(&joined))
 }
@@ -285,6 +288,26 @@ mod tests {
         assert_eq!(
             resolve_link("docs/a/index.md", "./c.md", "docs"),
             Some("docs/a/c.md".to_string())
+        );
+    }
+
+    #[test]
+    fn normpath_treats_windows_separators_as_logical_separators() {
+        assert_eq!(
+            normpath(r"C:\repo\docs\adr\..\index.md"),
+            "C:/repo/docs/index.md"
+        );
+    }
+
+    #[test]
+    fn resolve_link_matches_windows_paths_with_logical_paths() {
+        assert_eq!(
+            resolve_link(
+                r"C:\repo\docs\adr\index.md",
+                "0001-decision.md",
+                r"C:\repo\docs"
+            ),
+            Some("C:/repo/docs/adr/0001-decision.md".to_string())
         );
     }
 

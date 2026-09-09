@@ -123,17 +123,53 @@ bundle's markdown and frontmatter are shaped.**
 ## Installation
 
 The skill is plain **markdown instruction files** — nothing to compile or install to use it. The optional `living-docs` CLI — deterministic authoring, checking, and full-text search — is a single self-contained Rust binary with **no host-tool dependencies at all**: native frontmatter and link parsing (no lychee/yq/jq) and — since **v0.6.0** — in-process Mermaid validation via the pure-Rust `merman-core` parser, so `--mermaid-only` **no longer needs Docker**. Install it globally with `./install.sh cli`, or project-locally with `./install.sh cli --project`.
+
 Installing Living Docs always means the same thing: **put the three `skills/`
 directories (or a generated rule file) where your tool discovers instructions,
 then start a fresh session.** A cross-platform installer and a `Makefile` do this
-for every supported tool. Clone once:
+for every supported tool.
+
+Clone the skill repo once, as a sibling of the projects that will use it:
 
 ```bash
 git clone https://github.com/ejklock/living-docs-skill.git
-cd living-docs-skill
 ```
 
-### Quick start — `install.sh` / `make`
+### Quick start — co-located project bootstrap
+
+From the **target project root** (not the skill checkout), point `SOURCE` at the
+sibling clone and install the project-local skills, CLI, and hooks. This is the
+reproducible bootstrap for every co-located consumer repo:
+
+```bash
+SOURCE=../living-docs-skill/
+
+bash "$SOURCE/install.sh" codex --project
+bash "$SOURCE/install.sh" cursor --project
+
+bash "$SOURCE/install.sh" cli --project --from-source
+
+mkdir -p docs
+.living-docs/living-docs.exe hooks install --dir . --docs-dir docs
+```
+
+Swap `codex` / `cursor` for any other harness below. On Unix the executable is
+`.living-docs/living-docs` (no `.exe`). Drop `--from-source` to fetch the latest
+GitHub release asset instead of building the current skill-repo tree. The CLI's
+documentation checks and provenance sealing run natively on Windows; WSL is not
+required.
+
+Project-local installation adds a marker-delimited `.gitignore` block that ignores
+the executable and derived runtime state while leaving `.living-docs/hooks/`
+trackable. Both hooks resolve the CLI from `PATH` first, then from
+`.living-docs/living-docs[.exe]`. In the Living Docs source checkout they finally
+fall back to `target/release/living-docs[.exe]`, allowing the repository's hooks
+to validate the project while developing the CLI itself.
+
+### All harnesses — `install.sh` / `make`
+
+From the skill checkout itself, or via `bash "$SOURCE/install.sh" …` from a
+sibling project:
 
 ```bash
 ./install.sh                 # Claude Code, global (~/.claude/skills) — the default
@@ -147,8 +183,9 @@ cd living-docs-skill
 ```
 
 Useful flags: `--project` (install into the current repo instead of the global
-user dir; the CLI goes to `.living-docs/`), `--dir <path>` (custom destination), `--uninstall`, `--dry-run`,
-`--help`. The same targets are available via `make`:
+user dir; the CLI goes to `.living-docs/`), `--from-source` (cli only: `cargo
+build --release` instead of a release asset), `--dir <path>` (custom destination),
+`--uninstall`, `--dry-run`, `--help`. The same targets are available via `make`:
 
 ```bash
 make help            # list every target
@@ -163,21 +200,6 @@ make build           # build the living-docs binary natively -> target/release/l
 make cli-install     # install the living-docs binary onto PATH (fetches the latest GitHub release; LIVING_DOCS_VERSION pins a tag)
 make test-fixtures   # run the hostile/negative fixtures guarding the parsers
 ```
-
-For a self-contained project checkout, build and install the current source on
-Windows/Git Bash with:
-
-```bash
-./install.sh cli --project --from-source
-./.living-docs/living-docs.exe hooks install --dir . --docs-dir docs
-```
-
-On Unix the executable is `.living-docs/living-docs`. Project-local installation
-adds a marker-delimited `.gitignore` block that ignores the executable and derived
-runtime state while leaving `.living-docs/hooks/` trackable. Both hooks resolve the
-CLI from `PATH` first, then from `.living-docs/living-docs[.exe]`. In the Living Docs
-source checkout they finally fall back to `target/release/living-docs[.exe]`, allowing
-the repository's hooks to validate the project while developing the CLI itself.
 
 ### Where each tool loads from
 

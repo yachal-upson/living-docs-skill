@@ -61,10 +61,14 @@ pub(crate) fn check_canonical_frontmatter(
         };
         let canonical = to_canonical_markdown(&extract_record(path, &contents));
         let canonical_block = frontmatter_block(&canonical).unwrap_or_default();
-        if on_disk_block != canonical_block {
+        if normalize_line_endings(on_disk_block) != normalize_line_endings(canonical_block) {
             reporter.report(path, NON_CANONICAL_MESSAGE);
         }
     }
+}
+
+fn normalize_line_endings(text: &str) -> String {
+    text.replace("\r\n", "\n")
 }
 
 #[cfg(test)]
@@ -97,6 +101,17 @@ mod tests {
     #[test]
     fn check_canonical_frontmatter_accepts_an_already_canonical_record() {
         let canonical = "---\ntype: ADR\ntitle: Quokka Caching\ndescription: Adopt quokka caching.\n---\n\n# Quokka Caching\n\nBody.\n";
+        let (store, all_md) = store_with("/bundle/adr/0001-doc.md", canonical);
+        let mut reporter = Reporter::new();
+
+        check_canonical_frontmatter(&store, Path::new("/bundle"), &all_md, &mut reporter);
+
+        assert!(reporter.into_violations().is_empty());
+    }
+
+    #[test]
+    fn check_canonical_frontmatter_accepts_canonical_crlf_frontmatter() {
+        let canonical = "---\r\ntype: ADR\r\ntitle: Quokka Caching\r\ndescription: Adopt quokka caching.\r\n---\r\n\r\n# Quokka Caching\r\n";
         let (store, all_md) = store_with("/bundle/adr/0001-doc.md", canonical);
         let mut reporter = Reporter::new();
 

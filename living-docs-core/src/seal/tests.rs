@@ -109,3 +109,12 @@ fn seal_record_is_a_no_op_without_a_key_and_upserts_with_one() {
     let entry = ledger_key(&seal_dir, &record).expect("record under root");
     assert_eq!(ledger.get(&entry), Some(&seal_value(&key, &entry, RECORD)));
 }
+
+#[test]
+fn generated_seal_key_has_the_expected_size_on_every_supported_platform() {
+    let repo = ScratchRepo::new("key-size");
+    let key = generate_key(&repo.seal_dir()).expect("portable OS randomness");
+
+    assert_eq!(key.len(), 32);
+    assert!(repo.seal_dir().join("seal.key").is_file());
+}

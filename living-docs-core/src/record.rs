@@ -256,14 +256,25 @@ fn frontmatter_sequence(frontmatter: Option<&Value>, key: &str) -> Vec<String> {
 }
 
 fn strip_frontmatter(contents: &str) -> &str {
-    let Some(rest) = contents.strip_prefix("---\n") else {
+    let Some(rest) = contents
+        .strip_prefix("---\r\n")
+        .or_else(|| contents.strip_prefix("---\n"))
+    else {
         return contents;
     };
-    let Some(end) = rest.find("\n---") else {
+    let Some((end, closing_len)) = rest
+        .find("\r\n---")
+        .map(|end| (end, 5))
+        .or_else(|| rest.find("\n---").map(|end| (end, 4)))
+    else {
         return contents;
     };
-    let after_fence = &rest[end + 4..];
-    after_fence.strip_prefix('\n').unwrap_or(after_fence)
+    let after_fence = &rest[end + closing_len..];
+    after_fence
+        .strip_prefix('\r')
+        .and_then(|rest| rest.strip_prefix('\n'))
+        .or_else(|| after_fence.strip_prefix('\n'))
+        .unwrap_or(after_fence)
 }
 
 fn first_heading(body: &str) -> Option<String> {

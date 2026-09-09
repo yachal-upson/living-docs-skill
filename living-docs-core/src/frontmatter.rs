@@ -33,8 +33,10 @@ pub fn read_scalar_from_str(contents: &str, key: &str) -> Option<String> {
 /// already parsed from it (`record::extract_record`, `check::records`,
 /// `check::canonical`).
 pub(crate) fn frontmatter_block(contents: &str) -> Option<&str> {
-    let rest = contents.strip_prefix("---\n")?;
-    let end = rest.find("\n---")?;
+    let rest = contents
+        .strip_prefix("---\r\n")
+        .or_else(|| contents.strip_prefix("---\n"))?;
+    let end = rest.find("\r\n---").or_else(|| rest.find("\n---"))?;
     Some(&rest[..end])
 }
 
@@ -176,6 +178,16 @@ mod tests {
         assert_eq!(read_scalar(&path, "title"), expected);
 
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn read_scalar_accepts_crlf_frontmatter() {
+        let contents = "---\r\ntype: ADR\r\n---\r\n# Body\r\n";
+
+        assert_eq!(
+            read_scalar_from_str(contents, "type"),
+            Some("ADR".to_string())
+        );
     }
 
     #[test]

@@ -7,6 +7,7 @@
 //! is never a security boundary, and the ADR says so.
 
 use crate::frontmatter::frontmatter_block;
+use getrandom::fill;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::collections::BTreeMap;
@@ -54,18 +55,14 @@ pub fn load_key(seal_dir: &Path) -> Option<Vec<u8>> {
 /// re-baseline operation's first half.
 pub fn generate_key(seal_dir: &Path) -> Result<Vec<u8>, String> {
     let mut buf = vec![0u8; 32];
-    read_urandom(&mut buf)?;
+    read_random(&mut buf)?;
     fs::create_dir_all(seal_dir).map_err(|e| e.to_string())?;
     fs::write(seal_dir.join("seal.key"), &buf).map_err(|e| e.to_string())?;
     Ok(buf)
 }
 
-fn read_urandom(buf: &mut [u8]) -> Result<(), String> {
-    use std::io::Read;
-    let mut f = fs::File::open("/dev/urandom")
-        .map_err(|e| format!("cannot open /dev/urandom for the seal key: {e}"))?;
-    f.read_exact(buf)
-        .map_err(|e| format!("cannot read the seal key bytes: {e}"))
+fn read_random(buf: &mut [u8]) -> Result<(), String> {
+    fill(buf).map_err(|e| format!("cannot obtain random bytes for the seal key: {e}"))
 }
 
 pub fn read_ledger(seal_dir: &Path) -> BTreeMap<String, String> {

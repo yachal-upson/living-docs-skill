@@ -38,3 +38,24 @@ jobs:
 
       - name: living-docs check — install.sh syntax, docs invariants, mermaid, fixtures
         run: make check
+
+  windows-cli:
+    name: Windows CLI compatibility
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust 1.96.0 (rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@1.96.0
+
+      - name: Run native docs-check and sealing tests
+        run: >-
+          cargo test --manifest-path cli/Cargo.toml
+          --test check_core --test check_links --test check_mermaid
+          --test check_moved_source --test check_size
+
+      - name: Run living-docs-core unit tests
+        run: cargo test --manifest-path living-docs-core/Cargo.toml --lib
+
+      - name: Check the example bundle natively
+        run: cargo run --quiet --manifest-path cli/Cargo.toml -- check examples/linkly/docs
