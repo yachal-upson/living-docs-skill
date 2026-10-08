@@ -23,6 +23,11 @@ holds the full, authoritative conventions and templates and discloses them progr
 **Before authoring anything, load the topic for your task and operate from it, not from this
 stub:**
 
+Resolve the CLI from `living-docs` on `PATH`, then from the project-local
+`.living-docs/living-docs[.exe]`, then from `target/release/living-docs[.exe]`
+when working in the Living Docs source checkout. A project-local binary does
+not need to be added to `PATH`.
+
 - `living-docs guide --list` — discover every topic.
 - `living-docs guide <topic>` — load that topic's full rules (+ template).
 

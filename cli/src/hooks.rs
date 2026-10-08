@@ -3,7 +3,6 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::fs;
 use std::io;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -184,7 +183,7 @@ fn write_script_to(dest_dir: &Path, script: &HookScript) -> io::Result<()> {
     fs::create_dir_all(dest_dir)?;
     let dest = dest_dir.join(script.basename);
     fs::write(&dest, script.bytes.as_ref())?;
-    fs::set_permissions(&dest, fs::Permissions::from_mode(SCRIPT_MODE))?;
+    crate::script_mode::set_script_mode(&dest, SCRIPT_MODE)?;
     println!("wrote {}", dest.display());
     Ok(())
 }

@@ -1,10 +1,9 @@
-523 cli/src/hooks.rs
+522 cli/src/hooks.rs
 321 cli/src/skill_install.rs
 340 cli/src/skill.rs
 337 cli/tests/check_core.rs
 665 cli/tests/hooks_install.rs
 732 cli/tests/index_supersede.rs
 301 cli/tests/new.rs
-304 living-docs-core/src/check/graph.rs
 324 living-docs-core/src/commands/index.rs
-402 living-docs-core/src/record.rs
+396 living-docs-core/src/record.rs

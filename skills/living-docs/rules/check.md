@@ -30,8 +30,8 @@ It is a native Rust binary (correct without shelling out to a hand-rolled markdo
 parser): `serde_yaml` for frontmatter, `pulldown-cmark` for link extraction and resolution
 (every link form — inline, titled, angle-bracket, reference-style, images), and a native
 directory-index/reachability BFS plus supersede-chain walk for the OKF structural graph.
-No host tools to install — install the binary itself via `./install.sh` or
-`make cli-install`. `living-docs check --mermaid-only` validates Mermaid fences in-process
+No host tools to install — install the binary globally via `./install.sh`,
+project-locally via `./install.sh --project`, or via `make cli-install`. `living-docs check --mermaid-only` validates Mermaid fences in-process
 via the pure-Rust merman-core parser (ADR 0013) — no Docker, no host tools.
 
 A worked, lint-clean corpus lives in [`examples/linkly/`](../../examples/linkly/) — copy its shapes.

@@ -15,8 +15,14 @@ ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}
 resolve_bin() {
   if command -v living-docs >/dev/null 2>&1; then
     command -v living-docs
+  elif [ -x "$ROOT/.living-docs/living-docs" ]; then
+    printf '%s' "$ROOT/.living-docs/living-docs"
+  elif [ -x "$ROOT/.living-docs/living-docs.exe" ]; then
+    printf '%s' "$ROOT/.living-docs/living-docs.exe"
   elif [ -x "$ROOT/target/release/living-docs" ]; then
     printf '%s' "$ROOT/target/release/living-docs"
+  elif [ -x "$ROOT/target/release/living-docs.exe" ]; then
+    printf '%s' "$ROOT/target/release/living-docs.exe"
   fi
 }
 

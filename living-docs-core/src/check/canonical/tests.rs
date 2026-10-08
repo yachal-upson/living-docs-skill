@@ -24,6 +24,17 @@ fn frontmatter_block_is_none_without_a_leading_fence() {
 }
 
 #[test]
+fn check_canonical_frontmatter_accepts_canonical_crlf_frontmatter() {
+    let canonical = "---\r\ntype: ADR\r\ntitle: Quokka Caching\r\ndescription: Adopt quokka caching.\r\n---\r\n\r\n# Quokka Caching\r\n\r\nBody.\r\n";
+    let (store, all_md) = store_with("/bundle/adr/0001-doc.md", canonical);
+    let mut reporter = Reporter::new();
+
+    check_canonical_frontmatter(&store, Path::new("/bundle"), &all_md, &mut reporter);
+
+    assert!(reporter.into_violations().is_empty());
+}
+
+#[test]
 fn check_canonical_frontmatter_accepts_an_already_canonical_record() {
     let canonical = "---\ntype: ADR\ntitle: Quokka Caching\ndescription: Adopt quokka caching.\n---\n\n# Quokka Caching\n\nBody.\n";
     let (store, all_md) = store_with("/bundle/adr/0001-doc.md", canonical);

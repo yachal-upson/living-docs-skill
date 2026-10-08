@@ -25,7 +25,8 @@ use serde_yaml::Value;
 
 use crate::doc_type::{self, Identity};
 use crate::frontmatter::{
-    frontmatter_block, parse_frontmatter, read_scalar_strict, scalar_to_string,
+    body_after_frontmatter, frontmatter_block, parse_frontmatter, read_scalar_strict,
+    scalar_to_string,
 };
 
 /// The `identity_kind` discriminator for a sequentially numbered doc
@@ -256,14 +257,7 @@ fn frontmatter_sequence(frontmatter: Option<&Value>, key: &str) -> Vec<String> {
 }
 
 fn strip_frontmatter(contents: &str) -> &str {
-    let Some(rest) = contents.strip_prefix("---\n") else {
-        return contents;
-    };
-    let Some(end) = rest.find("\n---") else {
-        return contents;
-    };
-    let after_fence = &rest[end + 4..];
-    after_fence.strip_prefix('\n').unwrap_or(after_fence)
+    body_after_frontmatter(contents).unwrap_or(contents)
 }
 
 fn first_heading(body: &str) -> Option<String> {

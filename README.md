@@ -126,7 +126,7 @@ distribution, and every skill/hook placement is a CLI verb, never a copy step
 a shell script owns. Clone once:
 
 ```bash
-git clone https://github.com/ejklock/living-docs-skill.git
+git clone <this repo URL>
 cd living-docs-skill
 ```
 
@@ -142,7 +142,10 @@ Installing Living Docs is three independent steps:
    ```
 
    Useful flags: `--dir <path>` (custom destination, default `~/.local/bin`),
-   `--uninstall`, `--from-source`, `--dry-run`, `--help`.
+   `--project` (install into `./.living-docs/` as `living-docs` or `living-docs.exe`,
+   and ignore that runtime in `.gitignore` while leaving `.living-docs/hooks/`
+   trackable), `--uninstall`, `--from-source`, `--dry-run`, `--help`.
+   An explicit `--dir` stays unmanaged: it does not receive the gitignore block.
 
 2. **Place the skills** for your harness:
 
@@ -163,7 +166,10 @@ Installing Living Docs is three independent steps:
    living-docs install hooks [--dir <project>] [--docs-dir <bundle>] [--dry-run]
    ```
 
-   Materializes the session-teaching script into `.living-docs/hooks/`, wires
+   Materializes the session-teaching script into `.living-docs/hooks/`. The
+   hook scripts resolve the CLI from `PATH`, then `.living-docs/living-docs`
+   or `.living-docs/living-docs.exe`, then `target/release/living-docs` or
+   `target/release/living-docs.exe`. Wires
    `.claude/settings.json` with the resolved bundle pinned as
    `LIVING_DOCS_BUNDLE=`, and installs the pre-commit doc-gate at
    `.githooks/pre-commit` (pointing `core.hooksPath` at it). Remove everything

@@ -135,6 +135,7 @@ pub(crate) fn dirname_str(path: &str) -> String {
 /// Collapses `.` and `..` segments in a `/`-separated path. Pure string logic —
 /// the path need not exist on disk.
 pub(crate) fn normpath(path: &str) -> String {
+    let path = path.replace('\\', "/");
     let is_abs = path.starts_with('/');
     let mut out: Vec<&str> = Vec::new();
     for seg in path.split('/') {
@@ -164,6 +165,8 @@ fn normpath_pop_or_push(out: &mut Vec<&str>, is_abs: bool) {
 /// Resolves a markdown link target (as written in `file`) to a normalized
 /// path, or `None` if the link is external / a pure anchor / unsupported.
 fn resolve_link(file: &str, raw_target: &str, bundle: &str) -> Option<String> {
+    let file = normpath(file);
+    let bundle = normpath(bundle);
     let target = extract_link_target(raw_target)?;
     if target.contains("://") || target.starts_with("mailto:") || target.starts_with("tel:") {
         return None;
@@ -171,7 +174,7 @@ fn resolve_link(file: &str, raw_target: &str, bundle: &str) -> Option<String> {
     let joined = if target.starts_with('/') {
         format!("{bundle}/{target}")
     } else {
-        format!("{}/{}", dirname_str(file), target)
+        format!("{}/{}", dirname_str(&file), target)
     };
     Some(normpath(&joined))
 }
@@ -250,55 +253,4 @@ fn extract_paren_targets(text: &str) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normpath_collapses_dot_and_dotdot_segments() {
-        assert_eq!(normpath("docs/./a.md"), "docs/a.md");
-        assert_eq!(
-            normpath("docs/tables/../datasets/index.md"),
-            "docs/datasets/index.md"
-        );
-        assert_eq!(normpath("/docs/../index.md"), "/index.md");
-    }
-
-    #[test]
-    fn resolve_link_skips_external_and_anchor_only_targets() {
-        assert_eq!(
-            resolve_link("docs/index.md", "https://example.com/x", "docs"),
-            None
-        );
-        assert_eq!(resolve_link("docs/index.md", "#section", "docs"), None);
-        assert_eq!(
-            resolve_link("docs/index.md", "mailto:a@b.com", "docs"),
-            None
-        );
-    }
-
-    #[test]
-    fn resolve_link_resolves_bundle_relative_and_file_relative_targets() {
-        assert_eq!(
-            resolve_link("docs/a/index.md", "/b/index.md", "docs"),
-            Some("docs/b/index.md".to_string())
-        );
-        assert_eq!(
-            resolve_link("docs/a/index.md", "./c.md", "docs"),
-            Some("docs/a/c.md".to_string())
-        );
-    }
-
-    #[test]
-    fn links_in_excludes_targets_inside_fenced_code_blocks() {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("living-docs-graph-test-{nanos}.md"));
-        fs::write(&path, "[live](live.md)\n```\n[fenced](fenced.md)\n```\n").unwrap();
-
-        assert_eq!(links_in(&path), vec!["live.md".to_string()]);
-
-        let _ = fs::remove_file(&path);
-    }
-}
+mod tests;

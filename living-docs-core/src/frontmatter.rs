@@ -33,9 +33,48 @@ pub fn read_scalar_from_str(contents: &str, key: &str) -> Option<String> {
 /// already parsed from it (`record::extract_record`, `check::records`,
 /// `check::canonical`).
 pub(crate) fn frontmatter_block(contents: &str) -> Option<&str> {
-    let rest = contents.strip_prefix("---\n")?;
-    let end = rest.find("\n---")?;
-    Some(&rest[..end])
+    opened_frontmatter(contents).map(|(block, _)| block)
+}
+
+/// The record body after a leading frontmatter fence, when one is present.
+///
+/// Accepts both LF and CRLF fences. Callers that must keep the original
+/// contents when there is no fence use [`Option::unwrap_or`].
+pub(crate) fn body_after_frontmatter(contents: &str) -> Option<&str> {
+    opened_frontmatter(contents).map(|(_, body)| body)
+}
+
+fn opened_frontmatter(contents: &str) -> Option<(&str, &str)> {
+    let rest = strip_opening_fence(contents)?;
+    let (end, close_len) = closing_fence(rest)?;
+    let after = &rest[end + close_len..];
+    Some((&rest[..end], strip_one_newline(after)))
+}
+
+fn strip_opening_fence(contents: &str) -> Option<&str> {
+    contents
+        .strip_prefix("---\r\n")
+        .or_else(|| contents.strip_prefix("---\n"))
+}
+
+fn closing_fence(rest: &str) -> Option<(usize, usize)> {
+    let crlf = rest.find("\r\n---").map(|end| (end, 5));
+    let lf = rest.find("\n---").map(|end| (end, 4));
+    match (crlf, lf) {
+        (Some((crlf_at, crlf_len)), Some((lf_at, _))) if crlf_at <= lf_at => {
+            Some((crlf_at, crlf_len))
+        }
+        (_, Some(lf)) => Some(lf),
+        (Some(crlf), None) => Some(crlf),
+        (None, None) => None,
+    }
+}
+
+fn strip_one_newline(after: &str) -> &str {
+    after
+        .strip_prefix("\r\n")
+        .or_else(|| after.strip_prefix('\n'))
+        .unwrap_or(after)
 }
 
 /// Parses an already-sliced frontmatter `block` into a [`Value`], the single
@@ -176,6 +215,16 @@ mod tests {
         assert_eq!(read_scalar(&path, "title"), expected);
 
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn read_scalar_accepts_crlf_frontmatter() {
+        let contents = "---\r\ntype: ADR\r\n---\r\n# Body\r\n";
+
+        assert_eq!(
+            read_scalar_from_str(contents, "type"),
+            Some("ADR".to_string())
+        );
     }
 
     #[test]

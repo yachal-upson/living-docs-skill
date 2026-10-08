@@ -61,10 +61,14 @@ pub(crate) fn check_canonical_frontmatter(
         };
         let canonical = to_canonical_markdown(&extract_record(path, &contents));
         let canonical_block = frontmatter_block(&canonical).unwrap_or_default();
-        if on_disk_block != canonical_block {
+        if normalize_line_endings(on_disk_block) != normalize_line_endings(canonical_block) {
             reporter.report(path, NON_CANONICAL_MESSAGE);
         }
     }
+}
+
+fn normalize_line_endings(text: &str) -> String {
+    text.replace("\r\n", "\n")
 }
 
 #[cfg(test)]

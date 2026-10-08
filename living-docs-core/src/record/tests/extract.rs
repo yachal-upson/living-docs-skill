@@ -1,6 +1,16 @@
 use super::super::*;
 
 #[test]
+fn extract_record_reads_a_crlf_frontmatter_block() {
+    let contents = "---\r\ntype: ADR\r\ntitle: Quokka Caching\r\n---\r\n# Body\r\n";
+    let extracted = extract_record(Path::new("adr/0001-quokka-caching.md"), contents);
+
+    assert_eq!(extracted.doc_type, "ADR");
+    assert_eq!(extracted.title, "Quokka Caching");
+    assert_eq!(extracted.body, "# Body\r\n");
+}
+
+#[test]
 fn extract_record_derives_number_from_the_filenames_nnnn_prefix() {
     let contents = "---\ntype: ADR\ntitle: Quokka Caching\ndescription: Adopt quokka caching.\n---\n# 0001. Quokka Caching\n\nBody text.\n";
     let extracted = extract_record(Path::new("adr/0001-quokka-caching.md"), contents);

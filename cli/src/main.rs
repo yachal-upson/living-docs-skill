@@ -6,6 +6,7 @@ mod args;
 mod commands;
 mod hooks;
 mod output;
+mod script_mode;
 mod skill;
 mod skill_install;
 mod store;
